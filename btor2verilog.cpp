@@ -371,7 +371,7 @@ bool Btor2Verilog::combinational_assignment()
       assign_ = "{" + zeros + ", " + args_[0] + "}";
     }
   }
-  else if (l_->tag == BTOR2_TAG_rol)
+  else if (l_->tag == BTOR2_TAG_rol)  //rol
   {
     size_t amount = l_->args[1];
     size_t width = sorts_.at(l_->args[0]).w1;
@@ -379,7 +379,7 @@ bool Btor2Verilog::combinational_assignment()
     std::string bot = args_[0] + "[" + std::to_string(width-amount-1) + ":0]";
     assign_ = "{" + bot + ", " + top + "]";
   }
-  else if (l_->tag == BTOR2_TAG_rol)
+  else if (l_->tag == BTOR2_TAG_ror)  //ror
   {
     size_t amount = l_->args[1];
     size_t width = sorts_.at(l_->args[0]).w1;
@@ -475,7 +475,11 @@ bool Btor2Verilog::gen_verilog()
 {
   verilog_ = "module top(input rst,\n\tinput clk";
   Sort s;
-  for (auto in : inputs_)
+  // get ordered input, output
+  ordered_inputs_.insert(inputs_.begin(), inputs_.end());
+  ordered_outputs_.insert(outputs_.begin(), outputs_.end());
+
+  for (auto in : ordered_inputs_) //  inputs_
   {
     verilog_ += ",";
     s = sorts_.at(in);
@@ -486,7 +490,7 @@ bool Btor2Verilog::gen_verilog()
     }
     verilog_ += "\n\tinput " + get_full_select(s.w1) + " " + symbols_[in];
   }
-  for (auto out : outputs_)
+  for (auto out : ordered_outputs_) // outputs_
   {
     verilog_ += ",";
     s = sorts_.at(out);
@@ -547,9 +551,16 @@ bool Btor2Verilog::gen_verilog()
   }
 
   verilog_ += "\n\t// assignments\n";
-  for (auto elem : wire_assigns_)
+  // for (auto elem : wire_assigns_) //wire_assigns_
+  // {
+  //   verilog_ += "\tassign " + elem.first + " = " + elem.second + ";\n";
+  // }
+
+  //new for order assign 
+  std::vector<std::string> keys_assigns = order_wire_assign(wire_assigns_);
+  for (auto key : keys_assigns) 
   {
-    verilog_ += "\tassign " + elem.first + " = " + elem.second + ";\n";
+    verilog_ += "\tassign " + key + " = " + wire_assigns_[key] + ";\n";
   }
 
   verilog_ += "\n\t// array write assignments\n";
@@ -574,10 +585,18 @@ bool Btor2Verilog::gen_verilog()
     if (init_.size())
     {
       verilog_ += "\t\tif (rst) begin\n";
-      for (auto elem : init_)
+      // for (auto elem : init_)
+      // {
+      //   verilog_ += "\t\t\t" + elem.first + " <= " + elem.second + ";\n";
+      // }
+
+      //new for order init
+      std::vector<std::string> keys_states_init = order_wire_assign(init_);
+      for (auto key : keys_states_init)
       {
-        verilog_ += "\t\t\t" + elem.first + " <= " + elem.second + ";\n";
+        verilog_ += "\t\t\t" + key + " <= " + init_[key] + ";\n";
       }
+
       verilog_ += "\t\tend\n\t\telse begin\n";
     }
 
@@ -587,11 +606,17 @@ bool Btor2Verilog::gen_verilog()
         verilog_ += "\t\t if (1) begin\n";
       }
 
-      for (auto elem : state_updates_)
-      {
-        verilog_ += "\t\t\t" + elem.first + " <= " + elem.second + ";\n";
-      }
+      // for (auto elem : state_updates_)
+      // {
+      //   verilog_ += "\t\t\t" + elem.first + " <= " + elem.second + ";\n";
+      // }
 
+      //new for order state
+      std::vector<std::string> keys_states = order_wire_assign(state_updates_);
+      for (auto key : keys_states)
+      {
+        verilog_ += "\t\t\t" + key + " <= " + state_updates_[key] + ";\n";
+      }
     }
 
     verilog_ += "\t\tend\n";
@@ -621,5 +646,28 @@ bool Btor2Verilog::gen_verilog()
   verilog_ += "endmodule\n";
   return true;
 }
+
+/*************************************function for order map's key is string type**************************************/
+bool Btor2Verilog::naturalOrderCompare(const std::string& a, const std::string& b) 
+{
+  int numA = std::stoi(a.substr(1));
+  int numB = std::stoi(b.substr(1));
+  return numA < numB;
+}
+
+std::vector<std::string> Btor2Verilog::order_wire_assign(const std::unordered_map<std::string, std::string>& wire_assigns_)
+{
+  std::vector<std::string> keys;
+
+  for (const auto& pair : wire_assigns_)
+  {
+    keys.push_back(pair.first);
+  }
+
+  std::sort(keys.begin(), keys.end(), naturalOrderCompare);
+
+  return keys;
+}
+
 
 }
