@@ -503,7 +503,7 @@ bool Btor2Verilog::gen_verilog()
   }
   verilog_ += "\n);\n\n\t// states\n";
 
-  for (auto st : states_)
+  for (auto st : states_) //reg
   {
     s = sorts_.at(st);
     if (s.k == array_k)
@@ -523,7 +523,7 @@ bool Btor2Verilog::gen_verilog()
 
   verilog_ += "\n\t// wires\n";
 
-  for (auto w : wires_)
+  for (auto w : wires_) //wire
   {
     s = sorts_.at(w);
     if (s.k == array_k) {
@@ -539,10 +539,23 @@ bool Btor2Verilog::gen_verilog()
   }
 
   verilog_ += "\n\t// array write assignment wires\n";
-  for (const auto &elem : writes_) {
-    const string &write_name = elem.first;
-    const size_t &idx_width = get<3>(elem.second);
-    const size_t &elem_width = get<4>(elem.second);
+  // for (const auto &elem : writes_) {
+  //   const string &write_name = elem.first;
+  //   const size_t &idx_width = get<3>(elem.second);
+  //   const size_t &elem_width = get<4>(elem.second);
+  //   float f_num_elems = pow(2, idx_width);
+  //   assert(ceilf(f_num_elems) == f_num_elems);
+  //   int num_elems = f_num_elems;
+  //   verilog_ += "\tlogic [" + to_string(elem_width - 1) + ":0] " + write_name +
+  //               " [" + to_string(num_elems-1) + ":0];\n";
+  // }
+
+  //new for order writes_
+  std::vector<std::string> keys_writes_ = get_orderedkey_from_map(writes_);
+  for (const auto &key : keys_writes_) {
+    const string &write_name = key;
+    const size_t &idx_width = get<3>(writes_[key]);
+    const size_t &elem_width = get<4>(writes_[key]);
     float f_num_elems = pow(2, idx_width);
     assert(ceilf(f_num_elems) == f_num_elems);
     int num_elems = f_num_elems;
@@ -557,7 +570,7 @@ bool Btor2Verilog::gen_verilog()
   // }
 
   //new for order assign 
-  std::vector<std::string> keys_assigns = order_wire_assign(wire_assigns_);
+  std::vector<std::string> keys_assigns = get_orderedkey_from_map(wire_assigns_);
   for (auto key : keys_assigns) 
   {
     verilog_ += "\tassign " + key + " = " + wire_assigns_[key] + ";\n";
@@ -565,15 +578,27 @@ bool Btor2Verilog::gen_verilog()
 
   verilog_ += "\n\t// array write assignments\n";
   verilog_ += "\talways_comb begin\n";
-  for (const auto &elem : writes_) {
-    const string &write_name = elem.first;
-    const string &arr_name = get<0>(elem.second);
-    const string &idx_name = get<1>(elem.second);
-    const string &elem_name = get<2>(elem.second);
+  // for (const auto &elem : writes_) {
+  //   const string &write_name = elem.first;
+  //   const string &arr_name = get<0>(elem.second);
+  //   const string &idx_name = get<1>(elem.second);
+  //   const string &elem_name = get<2>(elem.second);
+  //   verilog_ += "\t\t" + write_name + " = " + arr_name + ";\n";
+  //   verilog_ +=
+  //       "\t\t" + write_name + "[" + idx_name + "] = " + elem_name + ";\n";
+  // }
+  
+  //new for order always comb
+  for (const auto &key : keys_writes_) {
+    const string &write_name = key;
+    const string &arr_name = get<0>(writes_[key]);
+    const string &idx_name = get<1>(writes_[key]);
+    const string &elem_name = get<2>(writes_[key]);
     verilog_ += "\t\t" + write_name + " = " + arr_name + ";\n";
     verilog_ +=
         "\t\t" + write_name + "[" + idx_name + "] = " + elem_name + ";\n";
   }
+
   verilog_ += "\tend\n\n";
 
   verilog_ += "\n\t// state updates and reset\n\t";
@@ -591,7 +616,7 @@ bool Btor2Verilog::gen_verilog()
       // }
 
       //new for order init
-      std::vector<std::string> keys_states_init = order_wire_assign(init_);
+      std::vector<std::string> keys_states_init = get_orderedkey_from_map(init_);
       for (auto key : keys_states_init)
       {
         verilog_ += "\t\t\t" + key + " <= " + init_[key] + ";\n";
@@ -612,7 +637,7 @@ bool Btor2Verilog::gen_verilog()
       // }
 
       //new for order state
-      std::vector<std::string> keys_states = order_wire_assign(state_updates_);
+      std::vector<std::string> keys_states = get_orderedkey_from_map(state_updates_);
       for (auto key : keys_states)
       {
         verilog_ += "\t\t\t" + key + " <= " + state_updates_[key] + ";\n";
@@ -648,26 +673,48 @@ bool Btor2Verilog::gen_verilog()
 }
 
 /*************************************function for order map's key is string type**************************************/
-bool Btor2Verilog::naturalOrderCompare(const std::string& a, const std::string& b) 
+bool Btor2Verilog::naturalOrderCompare_bit(const std::string& a, const std::string& b) 
 {
-  int numA = std::stoi(a.substr(1));
+  int numA = std::stoi(a.substr(1));  //remove 'w' or 's'
   int numB = std::stoi(b.substr(1));
   return numA < numB;
 }
 
-std::vector<std::string> Btor2Verilog::order_wire_assign(const std::unordered_map<std::string, std::string>& wire_assigns_)
+bool Btor2Verilog::naturalOrderCompare_array(const std::string& a, const std::string& b) 
+{
+  int numA = std::stoi(a.substr(6));  //remove 'write_'
+  int numB = std::stoi(b.substr(6));
+  return numA < numB;
+}
+
+std::vector<std::string> Btor2Verilog::get_orderedkey_from_map(const std::unordered_map<std::string, std::string>& unorderedmap)
 {
   std::vector<std::string> keys;
 
-  for (const auto& pair : wire_assigns_)
+  for (const auto& pair : unorderedmap)
   {
     keys.push_back(pair.first);
   }
 
-  std::sort(keys.begin(), keys.end(), naturalOrderCompare);
+  std::sort(keys.begin(), keys.end(), naturalOrderCompare_bit);
 
   return keys;
 }
 
+//overload function for writes_ type unorderd_map
+std::vector<std::string> Btor2Verilog::get_orderedkey_from_map(const std::unordered_map<std::string, std::tuple<std::string, std::string,
+                                                                      std::string, size_t, size_t>>& unorderedmap)
+{
+  std::vector<std::string> keys;
+
+  for (const auto& pair : unorderedmap)
+  {
+    keys.push_back(pair.first);
+  }
+
+  std::sort(keys.begin(), keys.end(), naturalOrderCompare_array);
+
+  return keys;
+}
 
 }

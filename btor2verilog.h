@@ -12,7 +12,6 @@ extern "C" {
 #include <unordered_set>
 #include <vector>
 #include <set>
-#include <map>
 
 enum Kind { bitvec_k=0, array_k=1, none_k=2};
 
@@ -82,7 +81,10 @@ namespace btor2verilog
     //for order signal
     std::set<size_t> ordered_inputs_;
     std::set<size_t> ordered_outputs_;
-    std::vector<std::string>  order_wire_assign(const std::unordered_map<std::string, std::string>& wire_assigns_);
-    static bool naturalOrderCompare(const std::string& string_a, const std::string& string_b);//static
+    std::vector<std::string>  get_orderedkey_from_map(const std::unordered_map<std::string, std::string>& unorderedmap);
+    std::vector<std::string>  get_orderedkey_from_map(const std::unordered_map<std::string, std::tuple<std::string, std::string,
+                                                                                std::string, size_t, size_t>>& unorderedmap);
+    static bool naturalOrderCompare_bit(const std::string& string_a, const std::string& string_b);
+    static bool naturalOrderCompare_array(const std::string& string_a, const std::string& string_b);
   };
 }
